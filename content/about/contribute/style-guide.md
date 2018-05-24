@@ -4,9 +4,10 @@ description: Explains the dos and donts of writing Istio docs.
 
 weight: 70
 
-redirect_from:
+aliases:
     - /docs/welcome/contribute/style-guide.html
     - /docs/reference/contribute/style-guide.html
+    - /about/contribute/style-guide.html
 ---
 
 TBD: This needs to be updated with Istio examples instead of Kubernetes examples.
@@ -17,7 +18,7 @@ propose changes to this document in a pull request.
 
 For additional information on creating new content for the Istio
 docs, follow the instructions on
-[Creating a Doc Pull Request](./creating-a-pull-request.html).
+[Creating a Doc Pull Request](/about/contribute/creating-a-pull-request/).
 
 ## Formatting standards
 

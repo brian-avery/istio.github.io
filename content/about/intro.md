@@ -5,6 +5,8 @@ description: Context about what problems Istio is designed to solve.
 weight: 1
 
 toc: false
+aliases:
+    - /about/intro.html
 ---
 
 Istio is an open platform that provides a uniform way to connect, manage,

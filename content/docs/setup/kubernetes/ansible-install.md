@@ -1,12 +1,10 @@
 ---
 title: Installation with Ansible
 description: Install Istio with the included Ansible playbook.
-
 weight: 40
-
+aliases:
+    - /docs/setup/kubernetes/ansible-install.html
 ---
-
-{% include home.html %}
 
 Instructions for the installation and configuration of Istio using Ansible.
 
