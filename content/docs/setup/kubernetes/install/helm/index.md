@@ -14,52 +14,69 @@ Follow this flow to install and configure an Istio mesh for in-depth evaluation 
 
 This installation flow uses [Helm](https://github.com/helm/helm) charts that provide rich
 customization of the Istio control plane and of the sidecars for the Istio data plane.
-You can simply use `helm template` to generate the configuration and then install it
-using `kubectl apply`, or you can choose to use `helm install` and let
-[Tiller](https://github.com/kubernetes/helm/blob/master/docs/architecture.md#components)
-completely manage the installation.
-
-Using these instructions, you can select any one of Istio's built-in
-[configuration profiles](/docs/setup/kubernetes/additional-setup/config-profiles/)
+You can start with one of Istio's built-in [configuration profiles](/docs/setup/kubernetes/additional-setup/config-profiles/)
 and then further customize the configuration for your specific needs.
 
 ## Prerequisites
 
-1. [Download the Istio release](/docs/setup/kubernetes/download/).
-
 1. Perform any necessary [platform-specific setup](/docs/setup/kubernetes/prepare/platform-setup/).
 
-1. Check the [Requirements for Pods and Services](/docs/setup/kubernetes/prepare/requirements/).
+1. Check the [Requirements for Pods and Services](/docs/setup/kubernetes/prepare/requirements/) on Pods and Services.
 
-1. [Install a Helm client](https://github.com/helm/helm/blob/master/docs/install.md) with a version higher than 2.10.
+1. [Install a Helm client with a version higher than 2.10](https://github.com/helm/helm/blob/master/docs/install.md).
+
+1. Istio by default uses `LoadBalancer` service object types.  Some platforms do not support `LoadBalancer`
+   service objects.  For platforms lacking `LoadBalancer` support, install Istio with `NodePort` support
+   instead with the flags `--set gateways.istio-ingressgateway.type=NodePort`
+   appended to the end of the Helm instructions in the installation steps below.
 
 {{< tip >}}
 These instructions assume the `istio-init` container will be used to setup `iptables` to redirect network traffic
 to/from Envoy sidecars. If you plan to customize the configuration to use `--set istio_cni.enabled=true`, you also
-need to ensure that a CNI plugin is deployed. Refer to [CNI Setup](/docs/setup/kubernetes/additional-setup/cni/)
+need to ensure that a CNI plugin is enabled. Refer to [CNI Setup](/docs/setup/kubernetes/additional-setup/cni/)
 for details.
 {{< /tip >}}
 
 ## Installation steps
 
-The following commands use the Helm charts that are included in the Istio release image.
-Change directory to the root of the release and then
-choose one of the following two **mutually exclusive** options:
-
-1. To deploy Istio without using Tiller, follow the instructions for [option 1](/docs/setup/kubernetes/install/helm/#option-1-install-with-helm-via-helm-template).
-1. To use [Helm's Tiller pod](https://helm.sh/) to manage your Istio release, follow the instructions for [option 2](/docs/setup/kubernetes/install/helm/#option-2-install-with-helm-and-tiller-via-helm-install).
+The following commands may be run from any directory. We use Helm to obtain the charts via a secure
+HTTPS endpoint hosted in Istio's infrastructure throughout this document.
 
 {{< tip >}}
-Istio, by default, uses `LoadBalancer` service object types. Some platforms do not support `LoadBalancer`
-service objects. For platforms lacking `LoadBalancer` support, install Istio with `NodePort` support
-instead with the flags `--set gateways.istio-ingressgateway.type=NodePort`
-appended to the end of the Helm instructions in the installation steps below.
+The techniques in this document use Istio's daily build of Istio 1.1 Helm packages.  These
+Helm charts may be slightly ahead of any particular snapshot as the project finishes the release
+candidates prior to 1.1 release. To use a snapshot-specific release, change the repo add URL to
+the appropriate snapshot.  For example, if you want to run with snapshot 6, use the
+[URL](https://gcsweb.istio.io/gcs/istio-prerelease/prerelease/1.1.0-snapshot.6/charts) in installation step 1 below.
 {{< /tip >}}
+
+1.  Update Helm's local package cache with the location of the Helm daily release:
+
+    {{< text bash >}}
+    $ helm repo add istio.io "https://gcsweb.istio.io/gcs/istio-prerelease/daily-build/release-1.1-latest-daily/charts/"
+    {{< /text >}}
+
+1. Choose one of the following two **mutually exclusive** options described below.
+
+    - To deploy Istio without using Tiller, follow the instructions for [option 1](/docs/setup/kubernetes/install/helm/#option-1-install-with-helm-via-helm-template).
+    - To use [Helm's Tiller pod](https://helm.sh/) to manage your Istio release, follow the instructions for [option 2](/docs/setup/kubernetes/install/helm/#option-2-install-with-helm-and-tiller-via-helm-install).
 
 ### Option 1: Install with Helm via `helm template`
 
-Choose this option if your cluster doesn't have [Tiller](https://github.com/kubernetes/helm/blob/master/docs/architecture.md#components)
-deployed and you don't want to install it.
+Choose this option if your cluster doesn't have [Tiller](https://github.com/kubernetes/helm/blob/master/docs/architecture.md#components) deployed and you don't want to install it.
+
+1. Make an Istio working directory for fetching the charts:
+
+    {{< text bash >}}
+    $ mkdir -p $HOME/istio-fetch
+    {{< /text >}}
+
+1. Fetch the helm templates needed for installation:
+
+    {{< text bash >}}
+    $ helm fetch istio.io/istio-init --untar --untardir $HOME/istio-fetch
+    $ helm fetch istio.io/istio --untar --untardir $HOME/istio-fetch
+    {{< /text >}}
 
 1. Create a namespace for the `istio-system` components:
 
@@ -67,75 +84,74 @@ deployed and you don't want to install it.
     $ kubectl create namespace istio-system
     {{< /text >}}
 
-1. Install all the Istio
-    [Custom Resource Definitions](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/#customresourcedefinitions)
-    (CRDs) using `kubectl apply`, and wait a few seconds for the CRDs to be committed in the Kubernetes API-server:
+1. Install all the Istio's [Custom Resource Definitions or CRDs for short](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/#customresourcedefinitions) via `kubectl apply`, and wait a few seconds for the CRDs to be committed to the Kubernetes API server:
 
     {{< text bash >}}
-    $ helm template install/kubernetes/helm/istio-init --name istio-init --namespace istio-system | kubectl apply -f -
+    $ helm template $HOME/istio-fetch/istio-init --name istio-init --namespace istio-system | kubectl apply -f -
     {{< /text >}}
 
-1. Verify that all `58` Istio CRDs were committed to the Kubernetes api-server using the following command:
+    {{< warning >}}
+    Do not manually delete Custom Resource Definitions from the generated yaml. Doing so will cause precondition
+    checks on various components to fail and will stop Istio from starting up correctly.
+    <p> If you *absolutely have to* delete CRDs, then update Galley deployment settings to explicitly indicate the kinds of deleted CRDs:
 
-    {{< text bash >}}
-    $ kubectl get crds | grep 'istio.io\|certmanager.k8s.io' | wc -l
-    58
-    {{< /text >}}
+{{< text bash >}}
 
-1. Select a [configuration profile](/docs/setup/kubernetes/additional-setup/config-profiles/)
-    and then render and apply Istio's core components corresponding to your chosen profile.
+$ kubectl -n istio-system edit deployment istio-galley
+
+{{< /text >}}
+
+{{< text yaml >}}
+
+    containers:
+    - command:
+        - /usr/local/bin/galley
+        - server
+        # ...
+        - --excludedResourceKinds
+        - noop                    # exclude CRD w/ kind: noop
+
+{{< /text >}}
+
+    {{< /warning >}}
+
+1. {{< boilerplate verify-crds >}}
+
+1. Render and apply Istio's core components corresponding to your chosen profile.
     The **default** profile is recommended for production deployments:
 
     {{< tip >}}
-    You can further customize the configuration by adding one or more `--set <key>=<value>`
-    [Installation Options](/docs/reference/config/installation-options/) to the helm command.
+    You can further customize the configuration by adding `--set <key>=<value>`
+    [Installation Options](/docs/reference/config/installation-options/) to the commands.
     {{< /tip >}}
 
 {{< tabset cookie-name="helm_profile" >}}
 
-{{< tab name="default" cookie-value="default" >}}
+{{% tab name="default" cookie-value="default" %}}
 
 {{< text bash >}}
-$ helm template install/kubernetes/helm/istio --name istio --namespace istio-system | kubectl apply -f -
+$ helm template $HOME/istio-fetch/istio --name istio --namespace istio-system | kubectl apply -f -
 {{< /text >}}
 
-{{< /tab >}}
+{{% /tab %}}
 
-{{< tab name="demo" cookie-value="demo" >}}
+{{% tab name="demo" cookie-value="demo" %}}
 
 {{< text bash >}}
-$ helm template install/kubernetes/helm/istio --name istio --namespace istio-system \
-    --values install/kubernetes/helm/istio/values-istio-demo.yaml | kubectl apply -f -
+$ helm template $HOME/istio-fetch/istio --name istio --namespace istio-system \
+    --values $HOME/istio-fetch/istio/values-istio-demo.yaml | kubectl apply -f -
 {{< /text >}}
 
-{{< /tab >}}
+{{% /tab %}}
 
-{{< tab name="demo-auth" cookie-value="demo-auth" >}}
+{{% tab name="minimal" cookie-value="minimal" %}}
 
 {{< text bash >}}
-$ helm template install/kubernetes/helm/istio --name istio --namespace istio-system \
-    --values install/kubernetes/helm/istio/values-istio-demo-auth.yaml | kubectl apply -f -
+$ helm template $HOME/istio-fetch/istio --name istio --namespace istio-system \
+      --values $HOME/istio-fetch/istio/values-istio-minimal.yaml | kubectl apply -f -
 {{< /text >}}
 
-{{< /tab >}}
-
-{{< tab name="minimal" cookie-value="minimal" >}}
-
-{{< text bash >}}
-$ helm template install/kubernetes/helm/istio --name istio --namespace istio-system \
-    --values install/kubernetes/helm/istio/values-istio-minimal.yaml | kubectl apply -f -
-{{< /text >}}
-
-{{< /tab >}}
-
-{{< tab name="sds" cookie-value="sds" >}}
-
-{{< text bash >}}
-$ helm template install/kubernetes/helm/istio --name istio --namespace istio-system \
-    --values install/kubernetes/helm/istio/values-istio-sds-auth.yaml | kubectl apply -f -
-{{< /text >}}
-
-{{< /tab >}}
+{{% /tab %}}
 
 {{< /tabset >}}
 
@@ -147,8 +163,7 @@ to manage the lifecycle of Istio.
 
 {{< boilerplate helm-security-warning >}}
 
-1. Make sure you have a service account with the `cluster-admin` role defined for Tiller.
-   If not already defined, create one using following command:
+1. If a service account has not already been installed for Tiller, install one:
 
     {{< text bash >}}
     $ kubectl apply -f @install/kubernetes/helm/helm-service-account.yaml@
@@ -163,147 +178,87 @@ to manage the lifecycle of Istio.
 1. Install the `istio-init` chart to bootstrap all the Istio's CRDs:
 
     {{< text bash >}}
-    $ helm install install/kubernetes/helm/istio-init --name istio-init --namespace istio-system
+    $ helm install istio.io/istio-init --name istio-init --namespace istio-system
     {{< /text >}}
 
-1. Verify that all `58` Istio CRDs were committed to the Kubernetes api-server using the following command:
+1. {{< boilerplate verify-crds >}}
 
-    {{< text bash >}}
-    $ kubectl get crds | grep 'istio.io\|certmanager.k8s.io' | wc -l
-    58
-    {{< /text >}}
-
-1. Select a [configuration profile](/docs/setup/kubernetes/additional-setup/config-profiles/)
-    and then install the `istio` chart corresponding to your chosen profile.
+1. Install the `istio` chart corresponding to your chosen profile.
     The **default** profile is recommended for production deployments:
 
     {{< tip >}}
-    You can further customize the configuration by adding one or more `--set <key>=<value>`
-    [Installation Options](/docs/reference/config/installation-options/) to the helm command.
+    You can further customize the configuration by adding `--set <key>=<value>`
+    [Installation Options](/docs/reference/config/installation-options/) to the commands.
     {{< /tip >}}
 
 {{< tabset cookie-name="helm_profile" >}}
 
-{{< tab name="default" cookie-value="default" >}}
+{{% tab name="default" cookie-value="default" %}}
 
 {{< text bash >}}
-$ helm install install/kubernetes/helm/istio --name istio --namespace istio-system
+$ helm install istio.io/istio --name istio --namespace istio-system
 {{< /text >}}
 
-{{< /tab >}}
+{{% /tab %}}
 
-{{< tab name="demo" cookie-value="demo" >}}
+{{% tab name="demo" cookie-value="demo" %}}
 
 {{< text bash >}}
-$ helm install install/kubernetes/helm/istio --name istio --namespace istio-system \
-    --values install/kubernetes/helm/istio/values-istio-demo.yaml
+$ helm install istio.io/istio --name istio --namespace istio-system \
+    --values $HOME/istio-fetch/istio/values-istio-demo.yaml
 {{< /text >}}
 
-{{< /tab >}}
+{{% /tab %}}
 
-{{< tab name="demo-auth" cookie-value="demo-auth" >}}
+{{% tab name="minimal" cookie-value="minimal" %}}
 
 {{< text bash >}}
-$ helm install install/kubernetes/helm/istio --name istio --namespace istio-system \
-    --values install/kubernetes/helm/istio/values-istio-demo-auth.yaml
+$ helm install istio.io/istio --name istio --namespace istio-system \
+    --values $HOME/istio-fetch/istio/values-istio-minimal.yaml
 {{< /text >}}
 
-{{< /tab >}}
-
-{{< tab name="minimal" cookie-value="minimal" >}}
-
-{{< text bash >}}
-$ helm install install/kubernetes/helm/istio --name istio --namespace istio-system \
-    --values install/kubernetes/helm/istio/values-istio-minimal.yaml
-{{< /text >}}
-
-{{< /tab >}}
-
-{{< tab name="sds" cookie-value="sds" >}}
-
-{{< text bash >}}
-$ helm install install/kubernetes/helm/istio --name istio --namespace istio-system \
-    --values install/kubernetes/helm/istio/values-istio-sds-auth.yaml
-{{< /text >}}
-
-{{< /tab >}}
+{{% /tab %}}
 
 {{< /tabset >}}
-
-## Verifying the installation
-
-1. Referring to components table in
-    [configuration profiles](/docs/setup/kubernetes/additional-setup/config-profiles/),
-    verify that the Kubernetes services corresponding to your selected profile have been deployed.
-
-    {{< text bash >}}
-    $ kubectl get svc -n istio-system
-    {{< /text >}}
-
-1. Ensure the corresponding Kubernetes pods are deployed and have a `STATUS` of `Running`:
-
-    {{< text bash >}}
-    $ kubectl get pods -n istio-system
-    {{< /text >}}
 
 ## Uninstall
 
-* If you installed Istio using the `helm template` command, uninstall with these commands:
+1. If you installed Istio with the `helm template`, uninstall with these commands:
 
 {{< tabset cookie-name="helm_profile" >}}
 
-{{< tab name="default" cookie-value="default" >}}
+{{% tab name="default" cookie-value="default" %}}
 
 {{< text bash >}}
-$ helm template install/kubernetes/helm/istio --name istio --namespace istio-system | kubectl delete -f -
+$ helm template $HOME/istio-fetch/istio --name istio --namespace istio-system | kubectl delete -f -
 $ kubectl delete namespace istio-system
 {{< /text >}}
 
-{{< /tab >}}
+{{% /tab %}}
 
-{{< tab name="demo" cookie-value="demo" >}}
+{{% tab name="demo" cookie-value="demo" %}}
 
 {{< text bash >}}
-$ helm template install/kubernetes/helm/istio --name istio --namespace istio-system \
-    --values install/kubernetes/helm/istio/values-istio-demo.yaml | kubectl delete -f -
+$ helm template $HOME/istio-fetch/istio --name istio --namespace istio-system \
+    --values $HOME/istio-fetch/istio/values-istio-demo.yaml | kubectl delete -f -
 $ kubectl delete namespace istio-system
 {{< /text >}}
 
-{{< /tab >}}
+{{% /tab %}}
 
-{{< tab name="demo-auth" cookie-value="demo-auth" >}}
+{{% tab name="minimal" cookie-value="minimal" %}}
 
 {{< text bash >}}
-$ helm template install/kubernetes/helm/istio --name istio --namespace istio-system \
-    --values install/kubernetes/helm/istio/values-istio-demo-auth.yaml | kubectl delete -f -
+$ helm template $HOME/istio-fetch/istio --name istio --namespace istio-system \
+      --values $HOME/istio-fetch/istio/values-istio-minimal.yaml | kubectl delete -f -
 $ kubectl delete namespace istio-system
 {{< /text >}}
 
-{{< /tab >}}
-
-{{< tab name="minimal" cookie-value="minimal" >}}
-
-{{< text bash >}}
-$ helm template install/kubernetes/helm/istio --name istio --namespace istio-system \
-    --values install/kubernetes/helm/istio/values-istio-minimal.yaml | kubectl delete -f -
-$ kubectl delete namespace istio-system
-{{< /text >}}
-
-{{< /tab >}}
-
-{{< tab name="sds" cookie-value="sds" >}}
-
-{{< text bash >}}
-$ helm template install/kubernetes/helm/istio --name istio --namespace istio-system \
-    --values install/kubernetes/helm/istio/values-istio-sds-auth.yaml | kubectl delete -f -
-$ kubectl delete namespace istio-system
-{{< /text >}}
-
-{{< /tab >}}
+{{% /tab %}}
 
 {{< /tabset >}}
 
-* If you installed Istio using Helm and Tiller, uninstall with these commands:
+1. If you installed  Istio using `Tiller`, uninstall with these commands:
 
     {{< text bash >}}
     $ helm delete --purge istio
@@ -321,10 +276,15 @@ configuration data rather than unexpectedly lose it.
 Deleting CRDs permanently deletes any configuration changes that you have made to Istio.
 {{< /warning >}}
 
-The `istio-init` chart contains all raw CRDs in the `istio-init/files` directory.
-You can simply delete the CRDs using `kubectl`.
-To permanently delete Istio's CRDs and the entire Istio configuration, run:
+The `istio-init` chart contains all raw CRDs in the `istio-init/files` directory.  After fetching this
+chart, you can simply delete the CRDs using `kubectl`.
+
+1. To permanently delete Istio's CRDs and the entire Istio configuration, run:
 
     {{< text bash >}}
-    $ kubectl delete -f install/kubernetes/helm/istio-init/files
+
+    $ mkdir -p $HOME/istio-fetch
+    $ helm fetch istio.io/istio-init --untar --untardir $HOME/istio-fetch
+    $ kubectl delete -f $HOME/istio-fetch/istio-init/files
+
     {{< /text >}}
